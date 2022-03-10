@@ -1,12 +1,15 @@
 import config
-import database
-from typing import List, Dict
+import datetime
+from typing import List, Dict, Tuple
 from cryptography.fernet import Fernet
-import hashlib
+from cryptography.fernet import InvalidToken
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import base64
 
 class Manager:
 
-    def __init__(self, profiles: List[Dict] = None):
+    def __init__(self, database: Tuple = None, profiles: List[Dict] = None):
         '''
         Args:
             profiles (List[Dict]): List of dictionaries with profiles from database
@@ -15,6 +18,24 @@ class Manager:
         self.hashedMasterPswd = None
         self.last_usage = None
         self.profiles = profiles
+        self.db = database
+
+    def isPswdValid(self) -> bool:
+        '''
+        Returns if recently entered master password is still valid
+        According to config.MASTERKEY_VALIDATION
+
+        Returns:
+            result (bool): False - invalid, True - valid
+        '''
+        if self.last_usage == None or type(self.last_usage) != datetime.datetime:
+            self.hashedMasterPswd = None
+            return False
+        delta = datetime.datetime.now() - self.last_usage
+        if delta.total_seconds() // 3600 <= config.MASTERKEY_VALIDATION:
+            return True
+        self.hashedMasterPswd = None
+        return False
 
     def encryptData(self, data: str, pswd_hash: bytes) -> bytes:
         '''
@@ -31,7 +52,7 @@ class Manager:
         data_encrypted = fernet.encrypt(data.encode())
         return data_encrypted
     
-    def decryptedData(self, data: bytes, pswd_hash: bytes) -> str:
+    def decrypteData(self, data: bytes, pswd_hash: bytes):
         '''
         Returns decrypted message from data using pswd_hash
 
@@ -41,11 +62,16 @@ class Manager:
 
         Returns:
             data_decrypted (str): Decrypted message from data
+            False : Invalid pswd_hash
         '''
-        fernet = Fernet(pswd_hash)
-        data_decrypted = str(fernet.decrypt(data))
-        return data_decrypted
-
+        try:
+            fernet = Fernet(pswd_hash)
+            data_decrypted = fernet.decrypt(data)
+            return data_decrypted.decode('utf-8')
+        except InvalidToken:
+            print('Invalid hashed password')
+            return False
+        
     def hashMasterPassword(self, master_pswd: str) -> bytes:
         '''
         Returns hashed master password
@@ -57,5 +83,6 @@ class Manager:
             hashed_pswd (bytes): Hashed master password
         '''
         pswd_encoded = master_pswd.encode()
-        hashed_pswd = hashlib.pbkdf2_hmac(hash_name='sha256', salt=''.encode(), password=pswd_encoded, iterations=100000, dklen=128)
+        kdf = PBKDF2HMAC(algorithm = hashes.SHA256(), salt= ''.encode(), iterations=390000, length=32)
+        hashed_pswd = base64.urlsafe_b64encode(kdf.derive(pswd_encoded))
         return hashed_pswd
