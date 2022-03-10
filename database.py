@@ -23,13 +23,12 @@ def allProfiles(database: Tuple[sqlite3.Connection, sqlite3.Cursor]):
         data = cur.fetchall()
         for profile in data:
             profile_id, service, username_hash, password_hash = profile
-            profiles.append({service : (username_hash, password_hash)})
+            profiles.append({service : (username_hash.encode(), password_hash.encode())})
         return profiles
     except sqlite3.Error as e:
         print(e)
         return False
     
-
 def newProfile(service_name: str, username_hash: str, password_hash: str, database: Tuple[sqlite3.Connection, sqlite3.Cursor]) -> bool:
     '''
     Creates new profile in DB
@@ -63,7 +62,7 @@ def setUp():
             cur (sqlite3.Cursor): Cursor of current connection
     '''
     try:
-        con = sqlite3.connect(database=config.DB_NAME)
+        con = sqlite3.connect(database=config.DB_NAME, check_same_thread=False)
         cur = con.cursor()
         init_query = '''CREATE TABLE IF NOT EXISTS profiles (
             id integer PRIMARY KEY,
