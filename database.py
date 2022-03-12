@@ -3,7 +3,7 @@ import config
 import sqlite3
 
 
-def allProfiles(database: Tuple[sqlite3.Connection, sqlite3.Cursor]):
+def allProfiles(database: Tuple[sqlite3.Connection, sqlite3.Cursor]) -> Dict:
     '''
     Returns all the profiles from DB
 
@@ -16,14 +16,14 @@ def allProfiles(database: Tuple[sqlite3.Connection, sqlite3.Cursor]):
     '''
     
     try:
-        profiles = []
+        profiles = {}
         con, cur = database
         fetching_query = '''SELECT * FROM profiles'''
         cur.execute(fetching_query)
         data = cur.fetchall()
         for profile in data:
             profile_id, service, username_hash, password_hash = profile
-            profiles.append({service : (username_hash.encode(), password_hash.encode())})
+            profiles[service] = (username_hash.encode(), password_hash.encode())
         return profiles
     except sqlite3.Error as e:
         print(e)

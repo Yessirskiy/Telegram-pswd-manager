@@ -1,3 +1,4 @@
+from re import S
 import config
 import datetime
 from typing import List, Dict, Tuple
@@ -71,18 +72,48 @@ class Manager:
         except InvalidToken:
             print('Invalid hashed password')
             return False
+      
+    def getProfile(self, service_name: str) -> Tuple[str]:
+        '''
+        Get profile username and password
+
+        Args:
+            service_name (Dict): Name of the service
         
-    def hashMasterPassword(self, master_pswd: str) -> bytes:
+        Retuns:
+            creds (Tuple[str]): (username, password) of service
+        
+        '''
+        usr_hash, psswd_hash = self.profiles[service_name]
+        return (self.decrypteData(usr_hash, self.hashedMasterPswd), self.decrypteData(psswd_hash, self.hashedMasterPswd))
+
+    def checkMasterPassword(self, password: str, salt: bytes, verify: bytes) -> bool:
+        '''
+        Checks if hashed with particular salt password is actual password
+
+        Args:
+            password (str): Raw input of the password
+            salt (bytes): Salt to hash password with
+            verify (bytes): Hashed actual master password
+
+        Returns:
+            result (bool): True - password is verified, False - password is NOT verified
+        '''
+        hash = self.hashPassword(password, salt)
+        return verify == hash
+
+    def hashPassword(self, master_pswd: str, salt: bytes) -> bytes:
         '''
         Returns hashed master password
 
         Args:
             master_pswd (str): Raw master password
+            salt (bytes): Salt for the password hashing
 
         Returns:
             hashed_pswd (bytes): Hashed master password
         '''
         pswd_encoded = master_pswd.encode()
-        kdf = PBKDF2HMAC(algorithm = hashes.SHA256(), salt= ''.encode(), iterations=390000, length=32)
+        kdf = PBKDF2HMAC(algorithm = hashes.SHA256(), salt=salt, iterations=390000, length=32)
         hashed_pswd = base64.urlsafe_b64encode(kdf.derive(pswd_encoded))
         return hashed_pswd
