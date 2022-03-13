@@ -45,7 +45,7 @@ def main():
     with open(config.VERIFIER_FILE, 'w', encoding='utf-8') as file:
         json.dump(data, file, ensure_ascii=False, indent=4)
         print(data)
-    print(f'[+] File {config.VERIFIER_FILE} is generated')
+    input(f'[+] File {config.VERIFIER_FILE} is generated')
 
 
 if __name__ == "__main__":
