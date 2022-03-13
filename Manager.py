@@ -1,6 +1,6 @@
-from re import S
 import config
 import datetime
+import database as db
 from typing import List, Dict, Tuple
 from cryptography.fernet import Fernet
 from cryptography.fernet import InvalidToken
@@ -72,7 +72,51 @@ class Manager:
         except InvalidToken:
             print('Invalid hashed password')
             return False
-      
+
+    def addProfile(self, profile_name: str, username: str, password: str) -> bool:
+        '''
+        Adding new profile
+
+        Args:
+            profile_name: Name of the new profile
+            username: Username of the new profile
+            password: Password of the new profile
+        
+        Returns:
+            result (bool): True - success, False - fail
+        '''
+        new_username = self.encryptData(username, self.hashedMasterPswd)
+        new_password = self.encryptData(password, self.hashedMasterPswd)
+        self.profiles[profile_name] = (new_username, new_password)
+        if db.newProfile(profile_name, new_username.decode('utf-8'), new_password.decode('utf-8'), database=self.db):
+            return True
+        del self.profiles[profile_name]
+        return False
+
+    def updateProfile(self, profile_name: str, new_name: str, new_usr: str, new_pswd: str) -> bool:
+        '''
+        Updating profile's credentials
+
+        Args:
+            profile_name (str): Name of the profile to be changed
+            new_name (str): New name of the profile
+            new_usr (str): New username of the profile
+            new_pswd (str): New password of the profile
+
+        Returns:
+            result (bool): True - success, False - fail
+        '''
+        username = self.encryptData(new_usr, self.hashedMasterPswd)
+        password = self.encryptData(new_pswd, self.hashedMasterPswd)
+        self.profiles[new_name] = (username, password)
+        if new_name != profile_name:
+            del self.profiles[profile_name]
+        if db.updateProfile(profile_name, new_name, username.decode('utf-8'), password.decode('utf-8'), self.db):
+            return True
+        if new_name != profile_name:
+            del self.profiles[new_name]
+        return False
+
     def getProfile(self, service_name: str) -> Tuple[str]:
         '''
         Get profile username and password
@@ -86,6 +130,21 @@ class Manager:
         '''
         usr_hash, psswd_hash = self.profiles[service_name]
         return (self.decrypteData(usr_hash, self.hashedMasterPswd), self.decrypteData(psswd_hash, self.hashedMasterPswd))
+
+    def deleteProfile(self, service_name: str) -> bool:
+        '''
+        Deleting User's profile
+        
+        Args:
+            service_name: Name of the service to delete
+
+        Returns: 
+            result (bool): True - success, False - fail
+        '''
+        if db.deleteProfile(service_name, self.db):
+            del self.profiles[service_name]
+            return True
+        return False
 
     def checkMasterPassword(self, password: str, salt: bytes, verify: bytes) -> bool:
         '''

@@ -52,6 +52,51 @@ def newProfile(service_name: str, username_hash: str, password_hash: str, databa
         return False
     return True
 
+def updateProfile(service_name: str, new_name: str, username_hash: str, password_hash: str, database: Tuple[sqlite3.Connection, sqlite3.Cursor]) -> bool:
+    '''
+    Updating username and password hashes in DB by service_name
+
+    Args:
+        service_name (str): Name of the service to update
+        new_name (str): New name of the profile
+        username_hash (str): Hash of new username
+        password_hash (str): Hash of new password
+        database (Tuple[sqlite3.Connection, sqlite3.Cursor]): database (tuple[sqlite3.Connection, sqlite3.Cursor]): connection and cursor of DB
+    
+    Returns:
+        result (bool): True - success, False - fail
+    '''
+    con, cur = database
+    query = f'UPDATE profiles SET username = ?, password = ?, service = ? WHERE service = ?'
+    try:
+        cur.execute(query, (username_hash, password_hash, new_name, service_name,))
+        con.commit()
+    except sqlite3.Error as e:
+        print(e)
+        return False
+    return True
+    
+def deleteProfile(service_name: str, database: Tuple[sqlite3.Connection, sqlite3.Cursor]) -> bool:
+    '''
+    Deleting profile in DB table
+
+    Args:
+        service_name (str): Name of the service to update
+        database (Tuple[sqlite3.Connection, sqlite3.Cursor]): database (tuple[sqlite3.Connection, sqlite3.Cursor]): connection and cursor of DB
+
+    Returns:
+        result (bool): True - success, False - fail
+    '''
+    con, cur = database
+    query = 'DELETE FROM profiles WHERE service = ?'
+    try:
+        cur.execute(query, (service_name,))
+        con.commit()
+    except sqlite3.Error as e:
+        print(e)
+        return False
+    return True
+
 def setUp():
     '''     
     Setup database

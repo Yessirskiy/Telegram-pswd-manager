@@ -29,74 +29,53 @@ def getNewProfileName(message: types.Message):
         bot.send_message(message.chat.id, text=f'_Name of the new service:_ *{message.text}*')
         mng.profiles[message.text] = ()
         bot.send_message(message.chat.id, text="_Please send new profile's _*username* _or_ *.q* _to quit_")
-        bot.register_next_step_handler(message=message, callback=getNewProfileUsername)
+        bot.register_next_step_handler(message=message, callback=getNewProfileUsername, profile_name=message.text)
     else:
         bot.send_message(message.chat.id, text='_Cancelled writing new profile._')
-
-def getNewProfileUsername(message: types.Message):
+def getNewProfileUsername(message: types.Message, **kwargs):
     '''
     Getting new profile's username from User
 
     Args:
         message (types.Message): User's message
+        profile_name (str): Name of the profile
 
     Check out register_next_step_handler from telebot documentation
     '''
-    service_name = [serv for serv in list(mng.profiles.keys()) if len(mng.profiles[serv]) == 0][0]
+    profile_name = kwargs['profile_name']
     if message.text != '.q':
         bot.delete_message(message.chat.id, message.message_id)
         bot.delete_message(message.chat.id, message.message_id - 1)
-        hashed_username = mng.encryptData(message.text, pswd_hash=mng.hashedMasterPswd)
-        mng.profiles[service_name] += (hashed_username,)
-        bot.send_message(message.chat.id, text='_Succesfully hashed new_ *username*.')
         bot.send_message(message.chat.id, text="_Please send new profile's _*password* _or_ *.q* _to quit or_ *.g* _to generate random._")
-        bot.register_next_step_handler(message=message, callback=getNewProfilePassword)
+        bot.register_next_step_handler(message=message, callback=getNewProfilePassword, profile_name = profile_name, profile_username = message.text)
     else:
         bot.send_message(message.chat.id, text='_Cancelled writing new profile._')
-        del mng.profiles[service_name]
-    
-def getNewProfilePassword(message: types.Message):
+def getNewProfilePassword(message: types.Message, **kwargs):
     '''
     Getting or generating new profile's password from User
 
     Args:
         message (types.Message): User's message
+        profile_name (str): Name of the new profile
+        profile_username (str): Username of the new profile
 
     Check out register_next_step_handler from telebot documentation
     '''
-    service_name = [serv for serv in list(mng.profiles.keys()) if len(mng.profiles[serv]) == 1][0]
+    profile_name = kwargs['profile_name']
+    profile_username = kwargs['profile_username']
     if message.text == '.q':
         bot.send_message(message.chat.id, text='_Cancelled writing new profile._')
-        del mng.profiles[service_name]
         return
     elif message.text == '.g':
-        generated_pswd = generatePassword()
-        hashed_password = mng.encryptData(generated_pswd, pswd_hash=mng.hashedMasterPswd)
+        profile_password = generatePassword()
     else:
-        hashed_password = mng.encryptData(message.text, pswd_hash=mng.hashedMasterPswd)
+        profile_password = message.text
     bot.delete_message(message.chat.id, message.message_id)
     bot.delete_message(message.chat.id, message.message_id - 1)
-    hashed_username = mng.profiles[service_name][0]
-    mng.profiles[service_name] += (hashed_password,)
-    bot.send_message(message.chat.id, text='_Succesfully hashed new_ *password*.')
-    addNewProfile(service_name, hashed_username, hashed_password, message)
-
-def addNewProfile(service_name: str, hashed_username: bytes, hashed_password: bytes, message):
-    '''
-    Adding new profile to db and Manager
-
-    Args:
-        service_name (str): Name of the profile's service
-        hashed_username (bytes): Hashed username of the profile
-        hashed_password (bytes): Hashed password of the profile
-        message: Message object
-    '''
-    res = db.newProfile(service_name=service_name, username_hash=hashed_username.decode('utf-8'), password_hash=hashed_password.decode('utf-8'), database=mng.db)
-    if res:
-        bot.send_message(message.chat.id, text=f'_Succesfully created new profile:_ *{service_name}*')
+    if mng.addProfile(profile_name, profile_username, profile_password):
+        bot.send_message(message.chat.id, text=f'_Succesfully created new profile:_ *{profile_name}*')
     else:
-        del mng.profiles[service_name]
-        bot.send_message(message.chat.id, text=f'_Failed creating new profile:_ *{service_name}*')
+        bot.send_message(message.chat.id, text=f'_Failed creating new profile:_ *{profile_name}*')
 
 def generatePassword(length: int = 16) -> str:
     '''
@@ -108,25 +87,36 @@ def generatePassword(length: int = 16) -> str:
     Returns:
         password (str): Randomly generated password
     '''
-
+    punctuation = '~-&@#_!?~@!_'
     if length < 6:
         length = 12
     uppercase_loc = secrets.choice(string.digits)  # random location of lowercase
     symbol_loc = secrets.choice(string.digits)  # random location of symbols
     lowercase_loc = secrets.choice(string.digits)  # random location of uppercase
     password = ""
-    pool = string.ascii_letters + string.punctuation  # the selection of characters used
+    pool = string.ascii_letters + punctuation  # the selection of characters used
     for i in range(length):
         if i == uppercase_loc:  # this is to ensure there is at least one uppercase
             password += secrets.choice(string.ascii_uppercase)
         elif i == lowercase_loc:  # this is to ensure there is at least one uppercase
             password += secrets.choice(string.ascii_lowercase)
         elif i == symbol_loc:  # this is to ensure there is at least one symbol
-            password += secrets.choice(string.punctuation)
+            password += secrets.choice(punctuation)
         else:  # adds a random character from pool
             password += secrets.choice(pool)
     return password
+def verifyPassword(message: types.Message):
+    '''
+    Verifying password
 
+    Args:
+        message (types.Message): User's message
+    '''
+    if os.path.exists(config.VERIFIER_FILE):
+        bot.send_message(message.chat.id, text="_Master Password currently is expired or not provided._\n\n_Send_ *master password* _in the next message or_ *.q* _to quit._")
+        bot.register_next_step_handler(message, callback=getMasterPassword)
+    else:
+        bot.send_message(message.chat.id, text=f"_Couldn't find verify file. Create or paste new verify file.\n\n Expected filename:_ *{config.VERIFIER_FILE}*")
 def getMasterPassword(message: types.Message):
     '''
     Getting Master Password from User
@@ -151,31 +141,6 @@ def getMasterPassword(message: types.Message):
         else:
             bot.send_message(message.chat.id, text='*Master password* _is not verified. Try one more time._')
 
-def verifyPassword(message: types.Message):
-    '''
-    Verifying password
-
-    Args:
-        message (types.Message): User's message
-    '''
-    if os.path.exists(config.VERIFIER_FILE):
-        bot.send_message(message.chat.id, text="_Master Password currently is expired or not provided._\n\n_Send_ *master password* _in the next message or_ *.q* _to quit._")
-        bot.register_next_step_handler(message, callback=getMasterPassword)
-    else:
-        bot.send_message(message.chat.id, text=f"_Couldn't find verify file. Create or paste new verify file.\n\n Expected filename:_ *{config.VERIFIER_FILE}*")
-
-def deleteMessage(chat_id: int, message_id: int, timeout: int):
-    '''
-    Deleting message in chat after specified time
-
-    Args:
-        chat_id (int): ID of the chat from Telegram
-        message_id (int): ID of the message from Telegram
-        timeout (int): Amount of minutes to wait before deleting
-    '''
-    time.sleep(timeout * 60)
-    bot.delete_message(chat_id, message_id)
-
 def getProfileCreds(message: types.Message):
     '''
     Sending profile credentials to User
@@ -191,6 +156,75 @@ def getProfileCreds(message: types.Message):
         threading.Thread(target=deleteMessage, args=(message.chat.id, message.message_id + 1, config.CREDS_DELETE_TIMEOUT,)).start()
     else:
         bot.send_message(message.chat.id, text=f'_Cannot find service with name_ *{message.text}*. _Try again_')
+def deleteMessage(chat_id: int, message_id: int, timeout: int):
+    '''
+    Deleting message in chat after specified time
+
+    Args:
+        chat_id (int): ID of the chat from Telegram
+        message_id (int): ID of the message from Telegram
+        timeout (int): Amount of minutes to wait before deleting
+    '''
+    time.sleep(timeout * 60)
+    bot.delete_message(chat_id, message_id)
+
+def getEditProfile(message: types.Message):
+    '''
+    Getting message with profile name to edit
+
+    Args:
+        message (types.Message): User's message
+    '''
+    if message.text in list(mng.profiles.keys()):
+        bot.send_message(message.chat.id, text="_Send profile's username and password in the following format:\n_   *name|username|password*\n\n_If you want to generate password type .g after |. Use .q to quit._")
+        bot.register_next_step_handler(message=message, callback=getEditProfileCreds, old_profile = message.text)
+    else:
+        bot.send_message(message.chat.id, text=f"_No such profile with name_ *{message.text}*. _Try again_")
+def getEditProfileCreds(message: types.Message, **kwargs):
+    '''
+    Getting edit profile's updated credentials
+
+    Args:
+        message (types.Message): User's message
+        old_profile (str): Name of the profile to be updated
+    '''
+    old_profile = kwargs['old_profile']
+    if message.text == '.q':
+        bot.send_message(message.chat.id, text='_Profile updating cancelled._')
+    elif message.text.count('|') == 2:
+        new_name, new_usr, new_pswd = message.text.split('|')
+        if new_pswd == '.g':
+            new_pswd = generatePassword()
+        if mng.updateProfile(old_profile, new_name, new_usr, new_pswd):
+            bot.send_message(message.chat.id, text=f'_Succesfully updated profile_ *{new_name}({old_profile})*.')
+            bot.delete_message(message.chat.id, message.message_id - 1)
+            bot.delete_message(message.chat.id, message.message_id)
+        else:
+            bot.send_message(message.chat.id, text=f"_Failed to update profile_ *{old_profile}*")
+    else:
+        bot.send_message(message.chat.id, text='_Wrong format of the message.\nValid format:_ *profile|username|password*. _Try one more time_')
+
+def getDeleteProfile(message: types.Message):
+    '''
+    Deleting Users's profile
+
+    Args:
+        message (types.Message): Users's message
+    '''
+    if message.text.count(' ') == 1:
+        phrase, profile = message.text.split(' ')
+        if phrase == 'DELETE' and (profile in list(mng.profiles.keys())):
+            if mng.deleteProfile(profile):
+                bot.send_message(message.chat.id, text=f'_Succesfully deleted profile_ *{profile}*')
+            else:
+                bot.send_message(message.chat.id ,text=f'_Failed to delete profile_ *{profile}*')
+
+        elif phrase != "DELETE":
+            bot.send_message(message.chat.id, text='_Wrong format of confirmation message. Try again_')
+        else:
+            bot.send_message(message.chat.id, text=f'_No profile with such name_ *{profile}*')
+    else:
+        bot.send_message(message.chat.id, text='_Wrong format of confirmation message. Try again_')
 
 @bot.message_handler(commands=['start'])
 def greetings(message: types.Message):
@@ -225,32 +259,36 @@ def handle_menu(message: types.Message):
     if message.chat.id not in config.ADMIN_IDS: # Auth on Telegram Level
         bot.send_message(message.chat.id, text="_Unfortunately you don't have access to this bot 🙅_")
     else:
-        if message.text == 'Add Profile 🖊️':
-            if mng.isPswdValid():
+        if mng.isPswdValid():
+            if message.text == 'Add Profile 🖊️':
                 bot.send_message(message.chat.id, text="_Please send new profile's _*service name* _or_ *.q* _to quit_")
                 bot.register_next_step_handler(message=message, callback=getNewProfileName)
-            else:
-                verifyPassword(message)
-        if message.text == 'Get Profile 🔑':
-            if mng.isPswdValid():
+            if message.text == 'Get Profile 🔑':
                 msg = '*Your profiles:\n*'
                 for serv in list(mng.profiles.keys()):
                     msg += f" - _{serv}_\n"
                 msg += '\n_Send service name in the following message..._'
                 bot.send_message(message.chat.id, msg)
                 bot.register_next_step_handler(message, getProfileCreds)
-            else:
-                verifyPassword(message)
-        if message.text == 'Export Profiles 📤':
-            if mng.isPswdValid():
+            if message.text == 'Export Profiles 📤':
                 filename = f'data-{datetime.datetime.now().strftime("%d-%m-%y")}.zip'
                 file = ZipFile(filename, 'w')
                 file.write(config.DB_NAME)
                 file.write(config.VERIFIER_FILE)
                 file.close()
-                bot.send_document(message.chat.id, data=open(filename, 'rb'))
-            else:
-                verifyPassword(message)         
+                bot.send_document(message.chat.id, data=open(filename, 'rb'))     
+            if message.text == 'Edit Profile ⚙️':
+                msg = '*Your profiles:\n*'
+                for serv in list(mng.profiles.keys()):
+                    msg += f" - _{serv}_\n"
+                msg += '\n_Send service name in the following message..._'
+                bot.send_message(message.chat.id, text=msg)
+                bot.register_next_step_handler(message, getEditProfile)
+            if message.text == 'Delete Profile 🗑️':
+                bot.send_message(message.chat.id, text="_To delete profile follow instructions:_\n\n  _Type 'DELETE profile', where profile is name of the service you would like to delete_.\n\n _Make sure you have exported profiles before deletion in a safety reasons._")
+                bot.register_next_step_handler(message, getDeleteProfile)
+        else:
+            verifyPassword(message)
 
 def main():
     database = db.setUp()
