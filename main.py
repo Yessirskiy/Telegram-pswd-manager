@@ -10,9 +10,11 @@ import json
 import threading
 import os
 from zipfile import ZipFile
+from loguru import logger
 
 bot = TeleBot(token=config.BOT_TOKEN, parse_mode='Markdown', threaded=True) # Initializing Telegram Bot
 mng = Manager()
+
 
 def getNewProfileName(message: types.Message):
     '''
@@ -73,8 +75,10 @@ def getNewProfilePassword(message: types.Message, **kwargs):
     bot.delete_message(message.chat.id, message.message_id)
     bot.delete_message(message.chat.id, message.message_id - 1)
     if mng.addProfile(profile_name, profile_username, profile_password):
+        logger.info(f'Profile {profile_name} succesfully added to Manager.')
         bot.send_message(message.chat.id, text=f'_Succesfully created new profile:_ *{profile_name}*')
     else:
+        logger.error(f"Profile {profile_name} wasn't added to Manager.")
         bot.send_message(message.chat.id, text=f'_Failed creating new profile:_ *{profile_name}*')
 
 def generatePassword(length: int = 16) -> str:
@@ -135,10 +139,12 @@ def getMasterPassword(message: types.Message):
         bot.delete_message(message.chat.id, message.message_id)
         bot.delete_message(message.chat.id, message.message_id - 1)
         if mng.checkMasterPassword(pswd, salt, verify):
+            logger.info("Entered password succefully verified.")
             bot.send_message(message.chat.id, text='_Succesfully verified_ *master password.*')
             mng.hashedMasterPswd = mng.hashPassword(pswd, b'')
             mng.last_usage = datetime.datetime.now()
         else:
+            logger.info("Entered password is not verified.")
             bot.send_message(message.chat.id, text='*Master password* _is not verified. Try one more time._')
 
 def getProfileCreds(message: types.Message):
@@ -152,6 +158,7 @@ def getProfileCreds(message: types.Message):
         usr, pswd = mng.getProfile(message.text)
         msg = f'   _Profile_ *{message.text}:*\n'
         msg += f'   _Username_ : `{usr}`\n   _Password_ : `{pswd}`\n\n_Message will be deleted in {config.CREDS_DELETE_TIMEOUT} mins._'
+        logger.info(f'Creds of {message.text} profile were sent to the user.')
         bot.send_message(message.chat.id, text=msg)
         threading.Thread(target=deleteMessage, args=(message.chat.id, message.message_id + 1, config.CREDS_DELETE_TIMEOUT,)).start()
     else:
@@ -196,10 +203,12 @@ def getEditProfileCreds(message: types.Message, **kwargs):
         if new_pswd == '.g':
             new_pswd = generatePassword()
         if mng.updateProfile(old_profile, new_name, new_usr, new_pswd):
+            logger.info(f'Succefully changed profile {old_profile} to {new_name}. Creds updated.')
             bot.send_message(message.chat.id, text=f'_Succesfully updated profile_ *{new_name}({old_profile})*.')
             bot.delete_message(message.chat.id, message.message_id - 1)
             bot.delete_message(message.chat.id, message.message_id)
         else:
+            logger.error(f"Couldn't update profile {old_profile}")
             bot.send_message(message.chat.id, text=f"_Failed to update profile_ *{old_profile}*")
     else:
         bot.send_message(message.chat.id, text='_Wrong format of the message.\nValid format:_ *profile|username|password*. _Try one more time_')
@@ -215,8 +224,10 @@ def getDeleteProfile(message: types.Message):
         phrase, profile = message.text.split(' ')
         if phrase == 'DELETE' and (profile in list(mng.profiles.keys())):
             if mng.deleteProfile(profile):
+                logger.info(f"Succefully deleted profile {profile}.")
                 bot.send_message(message.chat.id, text=f'_Succesfully deleted profile_ *{profile}*')
             else:
+                logger.error(f"Couldn't delete profile {profile}.")
                 bot.send_message(message.chat.id ,text=f'_Failed to delete profile_ *{profile}*')
 
         elif phrase != "DELETE":
@@ -238,6 +249,7 @@ def greetings(message: types.Message):
     '''
     if message.chat.id not in config.ADMIN_IDS: # Auth on Telegram Level
         bot.send_message(message.chat.id, text="_Unfortunately you don't have access to this bot 🙅_")
+        logger.info(f'Unknown user. Username: {message.chat.username}. ID: {message.chat.id}')
     else:
         main_menu_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         add_profile_btn = types.KeyboardButton(text = 'Add Profile 🖊️')
@@ -249,7 +261,7 @@ def greetings(message: types.Message):
         bot.send_message(message.chat.id, text='_Hello, use buttons from menu below to manage your passwords :)_', reply_markup=main_menu_markup)
 
 @bot.message_handler(content_types=['text'])
-def handle_menu(message: types.Message):
+def handle_menu(message: types.Message): 
     '''
     Handling button messages from User
 
@@ -258,6 +270,7 @@ def handle_menu(message: types.Message):
     '''
     if message.chat.id not in config.ADMIN_IDS: # Auth on Telegram Level
         bot.send_message(message.chat.id, text="_Unfortunately you don't have access to this bot 🙅_")
+        logger.info(f'Unknown user. Username: @{message.chat.username}. ID: {message.chat.id}.')
     else:
         if mng.isPswdValid():
             if message.text == 'Add Profile 🖊️':
@@ -275,8 +288,10 @@ def handle_menu(message: types.Message):
                 file = ZipFile(filename, 'w')
                 file.write(config.DB_NAME)
                 file.write(config.VERIFIER_FILE)
+                file.write(f'logs\\main_{datetime.datetime.now().strftime("%d-%m-%Y")}.log')
                 file.close()
                 bot.send_document(message.chat.id, data=open(filename, 'rb'))     
+                logger.info("Sent file with logs, DB and verifier to the user.")
             if message.text == 'Edit Profile ⚙️':
                 msg = '*Your profiles:\n*'
                 for serv in list(mng.profiles.keys()):
@@ -288,26 +303,38 @@ def handle_menu(message: types.Message):
                 bot.send_message(message.chat.id, text="_To delete profile follow instructions:_\n\n  _Type 'DELETE profile', where profile is name of the service you would like to delete_.\n\n _Make sure you have exported profiles before deletion in a safety reasons._")
                 bot.register_next_step_handler(message, getDeleteProfile)
         else:
+            logger.info('Master password is not verified.')
             verifyPassword(message)
 
 def main():
     database = db.setUp()
     if database: 
+        logger.info('Succesfully launched DB.')
         profiles = db.allProfiles(database=database)
         if profiles != False:
+            logger.info('Succesfully got profiles from DB.')
             mng.profiles = profiles
             mng.db = database
-            print("Bot succesfully launched")
+            logger.info('Start polling TG server.')
             while True:
                 try:
                     bot.infinity_polling()
                 except Exception as e:
-                    print(e)
+                    logger.error(f'TG polling error. Relaunch in 3 seconds. Error: {e}')
                     time.sleep(3)
         else:
-            print("Couldn't parse profiles from DB")
+            logger.critical("Couldn't parse DB profiles.")
     else:
-        print("Couldn't connect to DB")
+        logger.critical("Couldn't launch DB.")
 
 if __name__ == '__main__':
+    if not os.path.exists('logs'):
+        try:
+            os.mkdir('logs')
+        except PermissionError:
+            print('Launch bot as administrator')
+            input('Press ENTER to exit')
+            exit()
+    logger.add('logs\\main_{time:DD-MM-YYYY}.log', format="{time:DD.MM.YYYY - HH:mm:ss} | {level} | {message}", level='INFO', rotation='00:00', compression='zip', backtrace=True)
+    logger.info('========= bot launched =========')
     main()

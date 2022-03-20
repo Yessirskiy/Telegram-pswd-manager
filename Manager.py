@@ -7,6 +7,7 @@ from cryptography.fernet import InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
+from loguru import logger
 
 class Manager:
 
@@ -21,6 +22,7 @@ class Manager:
         self.profiles = profiles
         self.db = database
 
+    @logger.catch
     def isPswdValid(self) -> bool:
         '''
         Returns if recently entered master password is still valid
@@ -33,11 +35,12 @@ class Manager:
             self.hashedMasterPswd = None
             return False
         delta = datetime.datetime.now() - self.last_usage
-        if delta.total_seconds() // 3600 <= config.MASTERKEY_VALIDATION:
+        if delta.total_seconds() / 3600 <= config.MASTERKEY_VALIDATION:
             return True
         self.hashedMasterPswd = None
         return False
 
+    @logger.catch
     def encryptData(self, data: str, pswd_hash: bytes) -> bytes:
         '''
         Returns encrypted by password_hash data
@@ -53,6 +56,7 @@ class Manager:
         data_encrypted = fernet.encrypt(data.encode())
         return data_encrypted
     
+    @logger.catch
     def decrypteData(self, data: bytes, pswd_hash: bytes):
         '''
         Returns decrypted message from data using pswd_hash
@@ -72,7 +76,8 @@ class Manager:
         except InvalidToken:
             print('Invalid hashed password')
             return False
-
+    
+    @logger.catch
     def addProfile(self, profile_name: str, username: str, password: str) -> bool:
         '''
         Adding new profile
@@ -92,7 +97,8 @@ class Manager:
             return True
         del self.profiles[profile_name]
         return False
-
+    
+    @logger.catch
     def updateProfile(self, profile_name: str, new_name: str, new_usr: str, new_pswd: str) -> bool:
         '''
         Updating profile's credentials
@@ -116,7 +122,8 @@ class Manager:
         if new_name != profile_name:
             del self.profiles[new_name]
         return False
-
+    
+    @logger.catch
     def getProfile(self, service_name: str) -> Tuple[str]:
         '''
         Get profile username and password
@@ -130,7 +137,8 @@ class Manager:
         '''
         usr_hash, psswd_hash = self.profiles[service_name]
         return (self.decrypteData(usr_hash, self.hashedMasterPswd), self.decrypteData(psswd_hash, self.hashedMasterPswd))
-
+    
+    @logger.catch
     def deleteProfile(self, service_name: str) -> bool:
         '''
         Deleting User's profile
@@ -145,7 +153,8 @@ class Manager:
             del self.profiles[service_name]
             return True
         return False
-
+    
+    @logger.catch
     def checkMasterPassword(self, password: str, salt: bytes, verify: bytes) -> bool:
         '''
         Checks if hashed with particular salt password is actual password
@@ -160,7 +169,8 @@ class Manager:
         '''
         hash = self.hashPassword(password, salt)
         return verify == hash
-
+    
+    @logger.catch
     def hashPassword(self, master_pswd: str, salt: bytes) -> bytes:
         '''
         Returns hashed master password
